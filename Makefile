@@ -8,13 +8,22 @@ SKILL_SOURCE ?= $(CURDIR)
 SKILLS_CLI ?= npx --yes skills
 SKILL_AGENTS ?= claude-code codex opencode trae trae-cn
 SKILL_AGENT_FLAGS = $(foreach agent,$(SKILL_AGENTS),--agent "$(agent)")
+SKILL_COPY_FLAG ?=
 LEGACY_CODEX_SKILL_DIR ?= $(HOME)/.codex/skills/$(SKILL_NAME)
+VERBOSE ?= 0
 
-.PHONY: build test smoke smoke-exa smoke-codex-exec smoke-strict clean install install-cli install-skill install-skill-copy install-skill-all install-skill-list remove-legacy-codex-skill
+ifeq ($(VERBOSE),1)
+Q :=
+else
+Q := @
+endif
+
+.PHONY: build test smoke smoke-exa smoke-codex-exec smoke-strict clean install install-cli install-skill install-skill-copy install-skill-run install-skill-all install-skill-list remove-legacy-codex-skill
 
 build:
-	mkdir -p $(BIN_DIR)
-	go build -ldflags "-X main.version=$(VERSION)" -o $(CLI_BIN) ./cmd/opensearch-cli
+	@printf '==> Building %s %s\n' "$(CLI_BIN)" "$(VERSION)"
+	$(Q)mkdir -p $(BIN_DIR)
+	$(Q)go build -ldflags "-X main.version=$(VERSION)" -o $(CLI_BIN) ./cmd/opensearch-cli
 
 test:
 	go test ./...
@@ -66,29 +75,49 @@ smoke-strict: smoke smoke-exa smoke-codex-exec
 install: install-cli install-skill
 
 install-cli: build
-	mkdir -p $(INSTALL_BIN_DIR)
-	cp $(CLI_BIN) $(INSTALL_BIN_DIR)/opensearch-cli
+	@printf '==> Installing CLI to %s\n' "$(INSTALL_BIN_DIR)"
+	$(Q)mkdir -p $(INSTALL_BIN_DIR)
+	$(Q)cp $(CLI_BIN) $(INSTALL_BIN_DIR)/opensearch-cli
 	@installed="$$(cd "$(INSTALL_BIN_DIR)" && pwd)/opensearch-cli"; \
 	found="$$(command -v opensearch-cli 2>/dev/null || true)"; \
+	version="$$("$$installed" --version)"; \
+	"$$installed" --help >/dev/null; \
+	printf '[ok] CLI installed: %s (%s)\n' "$$installed" "$$version"; \
 	if test "$$found" = "$$installed"; then \
-		opensearch-cli --version; \
-		opensearch-cli --help >/dev/null; \
+		printf '  PATH resolves to installed CLI\n'; \
 	else \
 		printf 'warning: %s is installed but not the opensearch-cli found on PATH; add %s to PATH before using the skill\n' "$$installed" "$$(cd "$(INSTALL_BIN_DIR)" && pwd)" >&2; \
 	fi
 
 install-skill: 
-	$(SKILLS_CLI) add "$(SKILL_SOURCE)" -g --skill "$(SKILL_NAME)" $(SKILL_AGENT_FLAGS) -y --full-depth
-	$(MAKE) remove-legacy-codex-skill
-	$(SKILLS_CLI) ls -g --json
+	@$(MAKE) --no-print-directory install-skill-run
 
 install-skill-copy: 
-	$(SKILLS_CLI) add "$(SKILL_SOURCE)" -g --skill "$(SKILL_NAME)" $(SKILL_AGENT_FLAGS) -y --full-depth --copy
-	$(MAKE) remove-legacy-codex-skill
-	$(SKILLS_CLI) ls -g --json
+	@$(MAKE) --no-print-directory install-skill-run SKILL_COPY_FLAG=--copy
+
+install-skill-run:
+	@printf '==> Installing skill %s for agents: %s\n' "$(SKILL_NAME)" "$(SKILL_AGENTS)"
+	@if test "$(VERBOSE)" = "1"; then \
+		$(SKILLS_CLI) add "$(SKILL_SOURCE)" -g --skill "$(SKILL_NAME)" $(SKILL_AGENT_FLAGS) -y --full-depth $(SKILL_COPY_FLAG); \
+	else \
+		log="$$(mktemp "$${TMPDIR:-/tmp}/opensearch-skills-add.XXXXXX")"; \
+		if $(SKILLS_CLI) add "$(SKILL_SOURCE)" -g --skill "$(SKILL_NAME)" $(SKILL_AGENT_FLAGS) -y --full-depth $(SKILL_COPY_FLAG) >"$$log" 2>&1; then \
+			rm -f "$$log"; \
+		else \
+			status=$$?; \
+			printf 'error: skills add failed; full log follows:\n' >&2; \
+			sed 's/^/  /' "$$log" >&2; \
+			rm -f "$$log"; \
+			exit "$$status"; \
+		fi; \
+	fi
+	@$(MAKE) --no-print-directory remove-legacy-codex-skill
+	@$(SKILLS_CLI) ls -g --json | python3 -c "import json, sys; name = sys.argv[1]; items = json.load(sys.stdin); matches = [item for item in items if item.get('name') == name]; \
+sys.exit('error: {} is not listed by skills ls -g'.format(name)) if not matches else None; \
+item = matches[0]; print('[ok] Skill installed: {}'.format(item.get('path', '(unknown)'))); agents = ', '.join(item.get('agents') or []); print('  Agents: {}'.format(agents or '(none)'))" "$(SKILL_NAME)"
 
 install-skill-all:
-	$(MAKE) install-skill SKILL_AGENTS='*'
+	@$(MAKE) --no-print-directory install-skill SKILL_AGENTS='*'
 
 install-skill-list:
 	$(SKILLS_CLI) add "$(SKILL_SOURCE)" --list --full-depth

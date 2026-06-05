@@ -67,6 +67,12 @@ Install both the CLI and the skill:
 make install
 ```
 
+The default install log is concise. Use verbose output when troubleshooting:
+
+```bash
+make install VERBOSE=1
+```
+
 Install only the CLI:
 
 ```bash
