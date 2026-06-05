@@ -1,0 +1,13 @@
+name: opensearch
+description: |
+  Open Web search and public HTTP(S) page scraping via $opensearch / opensearch-cli. Use when the user needs open Web search, source discovery, research/comparison, latest public information, sourced citations, or reading/summarizing public HTTP(S) URLs. Do not use for the OpenSearch search-engine product: DSL, cluster operations, index configuration, or troubleshooting.
+version: 0.1.0
+author: fanlv
+tags:
+  - web-search
+  - scraping
+  - research
+  - sources
+entrypoint: SKILL.md
+default_prompt: |
+  Use $opensearch when the user needs open Web search, source discovery, latest public information, research/comparison with citations, or reading/summarizing public HTTP(S) URLs. Use opensearch-cli only; for factual answers, scrape usable page bodies before citing. For requests requiring login, cookies, CAPTCHA, browser interaction, JavaScript rendering, binary files, or unsupported content types, explain the capability boundary instead of attempting to bypass it. Do not use this skill for the OpenSearch search-engine product: DSL, cluster operations, index configuration, or troubleshooting.
